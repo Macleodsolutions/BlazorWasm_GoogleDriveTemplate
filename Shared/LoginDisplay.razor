@@ -1,25 +1,80 @@
-﻿@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.WebAssembly.Authentication
-
-@inject NavigationManager Navigation
-@inject SignOutSessionStateManager SignOutManager
-
-<AuthorizeView>
+@using System.Net.Http.Headers
+@using System.Net.Mime
+@using System.Text
+@using System.Text.Json
+@inject NavigationManager _navigation
+@inject SignOutSessionStateManager _signOutManager
+@inject HttpClient _http
+<AuthorizeView >
     <Authorized>
         Hello, @context.User.Identity?.Name!
         <button class="nav-link btn btn-link" @onclick="BeginSignOut">Log out</button>
+        <button class="nav-link btn btn-link" @onclick="UploadFile">Upload</button>
+        <button class="nav-link btn btn-link" @onclick="SearchForFile">Search</button>
     </Authorized>
     <NotAuthorized>
         <a href="authentication/login">Log in</a>
     </NotAuthorized>
 </AuthorizeView>
 
-@code{
-
+@code
+{
     private async Task BeginSignOut(MouseEventArgs args)
     {
-        await SignOutManager.SetSignOutState();
-        Navigation.NavigateTo("authentication/logout");
+        await _signOutManager.SetSignOutState();
+        _navigation.NavigateTo("authentication/logout");
+    }
+    
+    //Google Drive API usage examples
+
+    private async Task UploadFile()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "upload/drive/v3/files?uploadType=multipart");
+        var postBody = "Test content of json file TEST";
+        request.Content = new StringContent(JsonSerializer.Serialize(postBody), Encoding.UTF8, "application/json");
+        var metaContent = JsonContent.Create(new {name = "testfile.json",}); //parents = new string[]{"appDataFolder"} });
+        var multipart = new MultipartContent {metaContent, request.Content};
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue(MediaTypeNames.Application.Octet);
+        request.Content.Headers.ContentLength = postBody.Length;
+        var result = await _http.PostAsync(request.RequestUri, multipart);
+        Console.WriteLine(result);
     }
 
+    private async Task SearchForFile()
+    {
+        var searchKeyword = "json";
+        var response = await _http.GetAsync("https://www.googleapis.com/drive/v3/files?q=name%20contains%20%27" + searchKeyword + "%27"); //&spaces=appDataFolder");
+        var responseContentString = await response.Content.ReadAsStringAsync();
+        Console.WriteLine(responseContentString);
+    }
+
+    private async Task DownloadFile()
+    {
+        var fileId = "";
+        var response = await _http.GetAsync("https://www.googleapis.com/drive/v3/files/" + fileId + "?alt=media");
+        var downloadResponseContent = await response.Content.ReadAsStringAsync();
+        Console.WriteLine(downloadResponseContent);
+    }
+
+    private async Task DeleteFile()
+    {
+        var fileId = "";
+        var deleteResponse = await _http.DeleteAsync("https://www.googleapis.com/drive/v3/files/" + fileId);
+        Console.WriteLine(deleteResponse);
+    }
+
+    private async Task OverwriteFile()
+    {
+        var existingFileId = "";
+        var request = new HttpRequestMessage(HttpMethod.Post, "upload/drive/v3/files?uploadType=media");
+        var postBody = "Test content of json file";
+        request.Content = new StringContent(JsonSerializer.Serialize(postBody), Encoding.UTF8, "application/json");
+        var metaContent = JsonContent.Create(new {fileId = existingFileId, name = "testfile.json",}); //parents = new string[]{"appDataFolder"} });
+        var multipart = new MultipartContent {metaContent, request.Content};
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue(MediaTypeNames.Application.Octet);
+        request.Content.Headers.ContentLength = postBody.Length;
+        var result = await _http.PostAsync(request.RequestUri, multipart);
+        Console.WriteLine(result);
+    }
 }
